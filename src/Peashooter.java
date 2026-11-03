@@ -1,25 +1,29 @@
-import javax.swing.ImageIcon;
+import javax.imageio.ImageIO;
 import java.awt.Graphics;
-import java.awt.Image;
+import java.awt.image.BufferedImage;
 import java.awt.image.ImageObserver;
+import java.io.File;
+import java.io.IOException;
 
 public class Peashooter {
     private final int x;
     private final int y;
-    private final Image image;
+    private final BufferedImage image;
 
     public Peashooter(int x, int y) {
         this.x = x;
         this.y = y;
 
-        ImageIcon icon =
-                new ImageIcon("graphics/Plants/Peashooter/0.gif");
+        try {
+            image = ImageIO.read(
+                    new File("graphics/Plants/Peashooter/0.gif"));
 
-        if (icon.getIconWidth() <= 0) {
-            throw new IllegalStateException("找不到豌豆射手图片，请检查素材路径");
+            if (image == null) {
+                throw new IOException("无法读取图片");
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException("加载豌豆射手图片失败", e);
         }
-
-        image = icon.getImage();
     }
 
     public void draw(Graphics g, ImageObserver observer) {
