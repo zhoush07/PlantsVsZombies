@@ -487,8 +487,7 @@ public class GamePanel extends JPanel {
                         g.fillRect(x, y, CELL_W, CELL_H);
                     }
 
-                    g.setColor(new Color(255, 255, 255, 95));
-                    g.drawRect(x, y, CELL_W, CELL_H);
+
 
                     if (plant != null) {
                         plant.draw(g);
