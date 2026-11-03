@@ -1,40 +1,109 @@
 import javax.imageio.ImageIO;
-import javax.swing.JPanel;
+import javax.swing.*;
 import javax.swing.Timer;
-import java.awt.Color;
-import java.awt.Dimension;
-import java.awt.Font;
-import java.awt.FontMetrics;
-import java.awt.Graphics;
+import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Random;
 
 public class GamePanel extends JPanel {
+    // 先开放一行，共 9 个格子
+    private static final int GRID_X = 210;
+    private static final int GRID_Y = 200;
+    private static final int CELL_SIZE = 65;
+    private static final int COLUMN_COUNT = 9;
+
+    private static final int PLANT_COST = 100;
     private static final int TOTAL_ZOMBIES = 5;
 
     private final BufferedImage background;
-    private final Peashooter peashooter;
+
+    // 每个格子最多放一株植物
+    private final Peashooter[] plants =
+            new Peashooter[COLUMN_COUNT];
+
+    // 每株植物分别记录自己的发射时间
+    private final int[] shootTimes = new int[COLUMN_COUNT];
 
     private final List<Zombie> zombies = new ArrayList<>();
     private final List<Bullet> bullets = new ArrayList<>();
+    private final List<Sun> suns = new ArrayList<>();
 
+    private final Random random = new Random();
     private final Timer timer;
+
+
+
+    private int sunshine = 150;
+    private boolean plantSelected = false;
 
     private int spawnedCount = 0;
     private int defeatedCount = 0;
-
     private int spawnTime = 0;
-    private int shootTime = 0;
+    private int sunTime = 0;
 
     private boolean gameOver = false;
     private String resultText = "";
+    private String tip = "点击射手卡片，再点击下面的格子种植";
+
+    private final JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 20, 10));
+    private final JLabel sunLabel = new JLabel();
+    private final JLabel progressLabel = new JLabel();
+    private final JLabel statusLabel = new JLabel();
+    private final JToggleButton plantButton = new JToggleButton("豌豆射手 · 100 阳光");
+
+    public JPanel getToolbar() { return toolbar; }
+    public JLabel getStatusBar() { return statusLabel; }
+
+    private void refreshInterface() {
+        sunLabel.setText("阳光：" + sunshine);
+        progressLabel.setText("已出场：" + spawnedCount + "/" + TOTAL_ZOMBIES
+                + "    已消灭：" + defeatedCount);
+        plantButton.setSelected(plantSelected);
+        plantButton.setEnabled(!gameOver);
+        statusLabel.setText(gameOver ? resultText + " 关闭后重新运行可再玩一局。" : tip);
+    }
+
+    private double viewScale() {
+        return Math.min(getWidth() / 1120.0, getHeight() / 480.0);
+    }
 
     public GamePanel() {
         setPreferredSize(new Dimension(1120, 480));
+        setBackground(new Color(223, 234, 210));
+        toolbar.setBackground(new Color(243, 238, 220));
+        toolbar.add(sunLabel);
+        toolbar.add(plantButton);
+        toolbar.add(progressLabel);
+        toolbar.add(new JLabel("F11 全屏 / Esc 退出全屏"));
+        for (Component component : toolbar.getComponents()) {
+            component.setFont(new Font("Microsoft YaHei", Font.PLAIN, 16));
+        }
+        statusLabel.setFont(new Font("Microsoft YaHei", Font.PLAIN, 16));
+        statusLabel.setOpaque(true);
+        statusLabel.setBackground(new Color(243, 238, 220));
+        statusLabel.setBorder(BorderFactory.createEmptyBorder(8, 16, 8, 16));
+        plantButton.addActionListener(e -> {
+            if (gameOver) return;
+            if (plantSelected) {
+                plantSelected = false;
+                tip = "已取消选择";
+            } else if (sunshine >= PLANT_COST) {
+                plantSelected = true;
+                tip = "请选择一个空格子";
+            } else {
+                tip = "阳光不足，种植需要 100 阳光";
+            }
+            refreshInterface();
+            repaint();
+        });
+        refreshInterface();
 
         File imageFile = new File("graphics/Map/map0.jpg");
 
@@ -46,24 +115,82 @@ public class GamePanel extends JPanel {
             }
         } catch (IOException e) {
             throw new IllegalStateException(
-                    "加载草坪图片失败，请检查路径："
+                    "加载草坪图片失败："
                             + imageFile.getAbsolutePath(), e);
         }
 
-        peashooter = new Peashooter(300, 200);
-
-        // 开局先出现一只僵尸
-        spawnZombie();
+        addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                double scale = viewScale();
+                if (scale <= 0) return;
+                double offsetX = (getWidth() - 1120 * scale) / 2;
+                double offsetY = (getHeight() - 480 * scale) / 2;
+                double x = (e.getX() - offsetX) / scale;
+                double y = (e.getY() - offsetY) / scale;
+                if (x < 0 || x >= 1120 || y < 0 || y >= 480) return;
+                handleClick((int) x, (int) y);
+                refreshInterface();
+            }
+        });
 
         timer = new Timer(20, e -> {
             updateGame();
+            refreshInterface();
             repaint();
         });
     }
 
-    private void spawnZombie() {
-        zombies.add(new Zombie(1000, 155));
-        spawnedCount++;
+    private void handleClick(int mouseX, int mouseY) {
+        if (gameOver) {
+            return;
+        }
+
+        // 优先检查是否点击了阳光
+        Iterator<Sun> iterator = suns.iterator();
+
+        while (iterator.hasNext()) {
+            Sun sun = iterator.next();
+
+            if (sun.contains(mouseX, mouseY)) {
+                sunshine += 25;
+                iterator.remove();
+                tip = "收集成功！阳光 +25";
+                repaint();
+                return;
+            }
+        }
+
+        Rectangle plantingArea = new Rectangle(
+                GRID_X, GRID_Y,
+                COLUMN_COUNT * CELL_SIZE, CELL_SIZE);
+
+        // 检查点击位置是否在种植区域
+        if (plantingArea.contains(mouseX, mouseY)) {
+            int column = (mouseX - GRID_X) / CELL_SIZE;
+
+            if (!plantSelected) {
+                tip = "请先点击左上角的射手卡片";
+            } else if (plants[column] != null) {
+                tip = "这个格子已经有植物了";
+            } else if (sunshine < PLANT_COST) {
+                tip = "阳光不足";
+            } else {
+                int plantX = GRID_X + column * CELL_SIZE;
+
+                plants[column] = new Peashooter(plantX, GRID_Y);
+                shootTimes[column] = 0;
+
+                sunshine -= PLANT_COST;
+                plantSelected = false;
+                tip = "种植成功！";
+            }
+        } else {
+            plantSelected = false;
+            tip = "已取消选择，请种在标出的格子里";
+        }
+
+        repaint();
     }
 
     private void updateGame() {
@@ -71,23 +198,65 @@ public class GamePanel extends JPanel {
             return;
         }
 
-        // 1. 每隔 4 秒出现一只僵尸，最多 5 只
+        // 每隔 5 秒生成一个可点击的阳光
+        sunTime += 20;
+
+        if (sunTime >= 5000) {
+            int sunX = GRID_X + random.nextInt(550);
+            int sunY = 290 + random.nextInt(110);
+
+            suns.add(new Sun(sunX, sunY));
+            sunTime = 0;
+        }
+
+        // 阳光出现 12 秒后消失
+        Iterator<Sun> sunIterator = suns.iterator();
+
+        while (sunIterator.hasNext()) {
+            Sun sun = sunIterator.next();
+            sun.age += 20;
+
+            if (sun.age >= 12000) {
+                sunIterator.remove();
+            }
+        }
+
+        // 开局留 8 秒种植物，之后每隔 8 秒生成僵尸
         spawnTime += 20;
 
-        if (spawnTime >= 4000 && spawnedCount < TOTAL_ZOMBIES) {
-            spawnZombie();
+        if (spawnTime >= 8000 && spawnedCount < TOTAL_ZOMBIES) {
+            zombies.add(new Zombie(1000, 155));
+            spawnedCount++;
             spawnTime = 0;
         }
 
-        // 2. 场上有僵尸时，每隔 0.8 秒发射一颗豌豆
-        shootTime += 20;
+        // 每株植物独立发射子弹
+        for (int column = 0; column < COLUMN_COUNT; column++) {
+            if (plants[column] == null) {
+                continue;
+            }
 
-        if (!zombies.isEmpty() && shootTime >= 800) {
-            bullets.add(new Bullet(355, 215));
-            shootTime = 0;
+            shootTimes[column] = Math.min(
+                    shootTimes[column] + 20, 800);
+
+            int muzzleX = GRID_X + column * CELL_SIZE + 55;
+
+            // 只有前方存在僵尸时才开火
+            boolean hasTarget = false;
+
+            for (Zombie zombie : zombies) {
+                if (zombie.getBounds().x >= muzzleX) {
+                    hasTarget = true;
+                    break;
+                }
+            }
+
+            if (hasTarget && shootTimes[column] >= 800) {
+                bullets.add(new Bullet(muzzleX, GRID_Y + 15));
+                shootTimes[column] = 0;
+            }
         }
 
-        // 3. 移动僵尸和子弹
         for (Zombie zombie : zombies) {
             zombie.move();
         }
@@ -96,7 +265,7 @@ public class GamePanel extends JPanel {
             bullet.move();
         }
 
-        // 4. 检查子弹是否打中了僵尸
+        // 子弹命中检测
         Iterator<Bullet> bulletIterator = bullets.iterator();
 
         while (bulletIterator.hasNext()) {
@@ -119,7 +288,7 @@ public class GamePanel extends JPanel {
             }
         }
 
-        // 5. 移除已经被消灭的僵尸
+        // 清理被消灭的僵尸
         Iterator<Zombie> zombieIterator = zombies.iterator();
 
         while (zombieIterator.hasNext()) {
@@ -131,7 +300,6 @@ public class GamePanel extends JPanel {
             }
         }
 
-        // 6. 有僵尸越过草坪左侧，就失败
         for (Zombie zombie : zombies) {
             if (zombie.hasReachedHouse()) {
                 finishGame("游戏失败！");
@@ -139,15 +307,14 @@ public class GamePanel extends JPanel {
             }
         }
 
-        // 7. 全部出场，而且全部被消灭，才算胜利
         if (spawnedCount == TOTAL_ZOMBIES && zombies.isEmpty()) {
             finishGame("游戏胜利！");
         }
     }
 
-    private void finishGame(String message) {
+    private void finishGame(String text) {
         gameOver = true;
-        resultText = message;
+        resultText = text;
         timer.stop();
     }
 
@@ -167,12 +334,37 @@ public class GamePanel extends JPanel {
     }
 
     @Override
-    protected void paintComponent(Graphics g) {
-        super.paintComponent(g);
+    protected void paintComponent(Graphics original) {
+        super.paintComponent(original);
+        Graphics2D g = (Graphics2D) original.create();
+        double scale = viewScale();
+        g.translate((getWidth() - 1120 * scale) / 2,
+                (getHeight() - 480 * scale) / 2);
+        g.scale(scale, scale);
+        g.clipRect(0, 0, 1120, 480);
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                RenderingHints.VALUE_INTERPOLATION_BILINEAR);
 
-        // 先画背景，再画角色和子弹
-        g.drawImage(background, 0, 0, getWidth(), getHeight(), this);
-        peashooter.draw(g, this);
+        g.drawImage(background, 0, 0, 1120, 480, this);
+
+        // 标出当前可以种植的一行格子
+        for (int column = 0; column < COLUMN_COUNT; column++) {
+            int cellX = GRID_X + column * CELL_SIZE;
+
+            if (plantSelected && plants[column] == null) {
+                g.setColor(new Color(255, 255, 100, 65));
+                g.fillRect(cellX, GRID_Y, CELL_SIZE, CELL_SIZE);
+            }
+
+            g.setColor(new Color(255, 255, 255, 150));
+            g.drawRect(cellX, GRID_Y, CELL_SIZE, CELL_SIZE);
+        }
+
+        for (Peashooter plant : plants) {
+            if (plant != null) {
+                plant.draw(g, this);
+            }
+        }
 
         for (Zombie zombie : zombies) {
             zombie.draw(g);
@@ -182,30 +374,40 @@ public class GamePanel extends JPanel {
             bullet.draw(g);
         }
 
-        // 左上方显示进度
-        g.setColor(new Color(0, 0, 0, 170));
-        g.fillRoundRect(15, 15, 330, 45, 12, 12);
+        for (Sun sun : suns) {
+            sun.draw(g);
+        }
 
-        g.setColor(Color.WHITE);
-        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 18));
-        g.drawString(
-                "已出场：" + spawnedCount + "/" + TOTAL_ZOMBIES
-                        + "    已消灭：" + defeatedCount,
-                30, 44);
+        g.dispose();
+    }
 
-        // 游戏结束后显示结果
-        if (gameOver) {
-            g.setColor(new Color(0, 0, 0, 150));
-            g.fillRect(0, 0, getWidth(), getHeight());
+    // 暂时把阳光这个小类放在这里，之后可以单独拆成文件
+    private static class Sun {
+        private final int x;
+        private final int y;
+        private int age = 0;
 
-            g.setColor(Color.WHITE);
-            g.setFont(new Font("Microsoft YaHei", Font.BOLD, 48));
+        Sun(int x, int y) {
+            this.x = x;
+            this.y = y;
+        }
 
-            FontMetrics metrics = g.getFontMetrics();
-            int textX =
-                    (getWidth() - metrics.stringWidth(resultText)) / 2;
+        boolean contains(int mouseX, int mouseY) {
+            int dx = mouseX - (x + 22);
+            int dy = mouseY - (y + 22);
+            return dx * dx + dy * dy <= 22 * 22;
+        }
 
-            g.drawString(resultText, textX, getHeight() / 2);
+        void draw(Graphics g) {
+            g.setColor(new Color(255, 170, 0));
+            g.fillOval(x, y, 44, 44);
+
+            g.setColor(Color.YELLOW);
+            g.fillOval(x + 4, y + 4, 36, 36);
+
+            g.setColor(new Color(120, 70, 0));
+            g.setFont(new Font("Microsoft YaHei", Font.BOLD, 15));
+            g.drawString("+25", x + 7, y + 28);
         }
     }
 }
