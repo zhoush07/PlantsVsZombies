@@ -29,7 +29,7 @@ public class GamePanel extends JPanel {
 
     private enum PlantType {
         PEA("豌豆射手", 100),
-        SUNFLOWER("向日葵", 50);
+        SUNFLOWER("向日葵", 50), REPEATER("双发射手", 200), SNOW("寒冰射手", 175);
 
         final String name;
         final int cost;
@@ -45,6 +45,9 @@ public class GamePanel extends JPanel {
     private final BufferedImage sunflowerImage =
             loadImage("graphics/Plants/SunFlower/0.gif");
 
+    private final BufferedImage repeaterImage = loadImage("graphics/Plants/Repeater/0.gif");
+    private final BufferedImage snowImage = loadImage("graphics/Plants/SnowPea/0.gif");
+
     private final Plant[][] plants = new Plant[ROWS][COLS];
     private final List<Enemy> enemies = new ArrayList<>();
     private final List<Shot> shots = new ArrayList<>();
@@ -53,11 +56,13 @@ public class GamePanel extends JPanel {
     private final Random random = new Random();
 
     private final JPanel toolbar =
-            new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 8));
+            new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 8));
     private final JLabel sunLabel = new JLabel();
     private final JLabel progressLabel = new JLabel();
     private final JLabel statusLabel = new JLabel();
 
+    private final JToggleButton repeaterButton = new JToggleButton();
+    private final JToggleButton snowButton = new JToggleButton();
     private final JToggleButton peaButton = new JToggleButton();
     private final JToggleButton sunflowerButton = new JToggleButton();
     private final JToggleButton shovelButton =
@@ -145,6 +150,8 @@ public class GamePanel extends JPanel {
         toolbar.add(sunLabel);
         toolbar.add(peaButton);
         toolbar.add(sunflowerButton);
+        toolbar.add(repeaterButton);
+        toolbar.add(snowButton);
         toolbar.add(shovelButton);
         toolbar.add(progressLabel);
 
@@ -160,6 +167,8 @@ public class GamePanel extends JPanel {
         statusLabel.setBorder(
                 BorderFactory.createEmptyBorder(8, 12, 8, 12));
 
+        repeaterButton.addActionListener(e -> selectPlant(PlantType.REPEATER));
+        snowButton.addActionListener(e -> selectPlant(PlantType.SNOW));
         peaButton.addActionListener(e -> selectPlant(PlantType.PEA));
         sunflowerButton.addActionListener(
                 e -> selectPlant(PlantType.SUNFLOWER));
@@ -211,6 +220,8 @@ public class GamePanel extends JPanel {
                 "出场 " + spawnedCount + "/" + TOTAL_ZOMBIES
                         + "  消灭 " + defeatedCount);
 
+        updateCard(repeaterButton, PlantType.REPEATER);
+        updateCard(snowButton, PlantType.SNOW);
         updateCard(peaButton, PlantType.PEA);
         updateCard(sunflowerButton, PlantType.SUNFLOWER);
 
@@ -387,7 +398,7 @@ public class GamePanel extends JPanel {
                         && shot.bullet.getBounds().intersects(
                         enemy.zombie.getBounds())) {
 
-                    enemy.zombie.takeDamage(20);
+                    shot.bullet.hit(enemy.zombie);
                     shotIterator.remove();
                     break;
                 }
@@ -521,6 +532,7 @@ public class GamePanel extends JPanel {
         final Peashooter pea;
 
         int actionTime;
+        int secondShotTime;
 
         Plant(PlantType type, int row, int col) {
             this.type = type;
@@ -542,6 +554,13 @@ public class GamePanel extends JPanel {
                 return;
             }
 
+            // 双发射手的第二颗豌豆在第一颗之后 160 毫秒发射
+            if (secondShotTime > 0) {
+                secondShotTime -= STEP;
+                if (secondShotTime <= 0) {
+                    shots.add(new Shot(row, new Bullet(x + 55, y + 15)));
+                }
+            }
             actionTime = Math.min(actionTime + STEP, 800);
 
             boolean hasTarget = false;
@@ -555,7 +574,10 @@ public class GamePanel extends JPanel {
             }
 
             if (hasTarget && actionTime >= 800) {
-                shots.add(new Shot(row, new Bullet(x + 55, y + 15)));
+                shots.add(new Shot(row, new Bullet(x + 55, y + 15, type == PlantType.SNOW)));
+                if (type == PlantType.REPEATER) {
+                    secondShotTime = 160;
+                }
                 actionTime = 0;
             }
         }
@@ -565,7 +587,7 @@ public class GamePanel extends JPanel {
                 pea.draw(g, GamePanel.this);
             } else {
                 g.drawImage(
-                        sunflowerImage, x, y, 65, 65, GamePanel.this);
+                        (type == PlantType.REPEATER ? repeaterImage : type == PlantType.SNOW ? snowImage : sunflowerImage), x, y, 65, 65, GamePanel.this);
             }
         }
     }
