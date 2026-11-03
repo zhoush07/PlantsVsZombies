@@ -1,32 +1,18 @@
-import javax.imageio.ImageIO;
-import java.awt.Graphics;
-import java.awt.image.BufferedImage;
-import java.awt.image.ImageObserver;
-import java.io.File;
-import java.io.IOException;
-
-public class Peashooter {
-    private final int x;
-    private final int y;
-    private final BufferedImage image;
-
-    public Peashooter(int x, int y) {
-        this.x = x;
-        this.y = y;
-
-        try {
-            image = ImageIO.read(
-                    new File("graphics/Plants/Peashooter/0.gif"));
-
-            if (image == null) {
-                throw new IOException("无法读取图片");
-            }
-        } catch (IOException e) {
-            throw new IllegalStateException("加载豌豆射手图片失败", e);
+/** 普通射手：每 800 毫秒攻击一次。 */
+public class Peashooter extends Plant {
+    private int attackTime;
+    public Peashooter(int row, int col) {
+        this(row, col, "graphics/Plants/Peashooter/0.gif");
+    }
+    protected Peashooter(int row, int col, String path) { super(row, col, path); }
+    @Override public void update(GameModel game, int elapsedMs) {
+        attackTime = Math.min(800, attackTime + elapsedMs);
+        if (attackTime >= 800 && game.hasTarget(row, x + 55)) {
+            fire(game);
+            attackTime = 0;
         }
     }
-
-    public void draw(Graphics g, ImageObserver observer) {
-        g.drawImage(image, x, y, 65, 65, observer);
+    protected void fire(GameModel game) {
+        game.addShot(row, new Bullet(x + 55, y + 15));
     }
 }

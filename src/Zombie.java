@@ -13,6 +13,7 @@ public class Zombie {
     private double x;
     private final int y;
     private int health = 100;
+    private int slowTime;
 
     public Zombie(int x, int y) {
         this.x = x;
@@ -35,7 +36,12 @@ public class Zombie {
     }
 
     public void move() {
-        x -= 0.6;
+        x -= slowTime > 0 ? 0.3 : 0.6;
+        slowTime = Math.max(0, slowTime - 20);
+    }
+
+    public void applySlow() {
+        slowTime = 3000; // 重复命中刷新时间，不叠加减速强度
     }
 
     public void takeDamage(int damage) {
@@ -61,7 +67,7 @@ public class Zombie {
         g.setColor(Color.DARK_GRAY);
         g.fillRect((int) x + 15, y - 10, 50, 6);
 
-        g.setColor(Color.RED);
+        g.setColor(slowTime > 0 ? Color.CYAN : Color.RED);
         g.fillRect((int) x + 15, y - 10, health / 2, 6);
     }
 }
