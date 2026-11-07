@@ -59,7 +59,7 @@ public class GameModel {
         gameOver = true;
         selectedPlant = null;
         shovelSelected = false;
-        tip = message + " 重新运行 Main 可以再玩一局。";
+        tip = message + " 点击“重新开始”再玩一局，或返回主菜单。";
     }
 
 
