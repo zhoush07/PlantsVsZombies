@@ -58,6 +58,10 @@ public class GifAnimation {
         } catch (Exception e) { throw new IllegalStateException("GIF加载失败："+path,e); }
         finally { reader.dispose(); }
     }
+    public int getDuration() { return duration; }
+    public BufferedImage frameOnce(long time) {
+        return frame(Math.min(Math.max(0, time), duration - 1L));
+    }
     public BufferedImage frame(long time) {
         long remaining=time%duration;
         for(int i=0;i<frames.size();i++) {

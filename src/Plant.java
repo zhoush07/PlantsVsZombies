@@ -1,12 +1,26 @@
 import java.awt.Color;
 import java.awt.Graphics;
-import java.awt.image.BufferedImage;
 
 public abstract class Plant {
     public final int row, col;
     protected final int x, y;
 
-    private final BufferedImage image;
+    private GifAnimation animation;
+    private long animationTime;
+    private int reactionTime;
+
+    public final void advanceAnimation(int elapsedMs) {
+        animationTime += elapsedMs;
+        reactionTime = Math.max(0, reactionTime - elapsedMs);
+    }
+    protected final void react() { reactionTime = 160; }
+    protected final void setAnimation(String path) {
+        GifAnimation next = GifAnimation.load(path);
+        if (next != animation) { animation = next; animationTime = 0; }
+    }
+    public final AnimationEffect deathEffect() {
+        return new AnimationEffect(animation.frame(animationTime), x, y, 65, 65);
+    }
     private boolean consumed;
     private int health = 100;
 
@@ -17,13 +31,14 @@ public abstract class Plant {
         x = GameModel.GRID_X + col * GameModel.CELL_W;
         y = GameModel.plantY(row);
 
-        image = Assets.load(imagePath);
+        animation = GifAnimation.load(imagePath);
     }
 
     public abstract void update(GameModel game, int elapsedMs);
 
     public void takeDamage(int damage) {
         health = Math.max(0, health - damage);
+        react();
     }
 
     public boolean isDead() {
@@ -35,7 +50,8 @@ public abstract class Plant {
     }
 
     public void draw(Graphics g) {
-        g.drawImage(image, x, y, 65, 65, null);
+        int recoil = reactionTime * 4 / 160;
+        g.drawImage(animation.frame(animationTime), x - recoil, y, 65, 65, null);
 
         // 受伤后才显示植物血条
         if (health < 100) {
