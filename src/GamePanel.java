@@ -7,7 +7,10 @@ import java.util.EnumMap;
 
 /** 只负责界面、缩放、鼠标输入和刷新；植物行为由各植物类完成。 */
 public class GamePanel extends JPanel {
-    private final GameModel game = new GameModel();
+    private final GameModel game;
+    private String shownTip="";
+    private long tipUntil;
+    public boolean isWon() { return game.won; }
     private final BufferedImage background = Assets.load("graphics/Map/map0.jpg");
     private final JPanel toolbar = new JPanel(new BorderLayout());
     private final JLabel sunLabel = new JLabel(), progressLabel = new JLabel();
@@ -80,7 +83,9 @@ public class GamePanel extends JPanel {
         }
     }
 
-    public GamePanel() {
+    public GamePanel() { this(Difficulty.EASY); }
+    public GamePanel(Difficulty difficulty) {
+        game=new GameModel(difficulty);
         setPreferredSize(new Dimension(GameModel.WIDTH, GameModel.HEIGHT));
         setBackground(new Color(223, 234, 210));
         buildInterface();
@@ -177,7 +182,7 @@ public class GamePanel extends JPanel {
 
     private void refreshInterface() {
         sunLabel.setText("阳光：" + game.sunshine);
-        progressLabel.setText("出场 " + game.spawnedCount + "/" + GameModel.TOTAL_ZOMBIES
+        progressLabel.setText("出场 " + game.spawnedCount + "/" + game.difficulty.totalZombies
                 + "  消灭 " + game.defeatedCount);
         for (PlantType type : PlantType.values()) {
             JToggleButton button = cards.get(type);
@@ -199,9 +204,25 @@ public class GamePanel extends JPanel {
         }
         shovelButton.setSelected(game.shovelSelected);
         shovelButton.setEnabled(!game.gameOver && !paused && !closed);
-        statusLabel.setText(
-                (paused ? "已暂停，点击继续恢复游戏" : game.tip)
-                        + "    |    F11 全屏 / Esc 退出全屏");
+        statusLabel.setText("F11 全屏 / Esc 退出全屏");
+        if (!shownTip.equals(game.tip)) {
+            shownTip=game.tip;
+            tipUntil=System.nanoTime()+1_800_000_000L;
+        }
+    }
+
+    private void drawTip(Graphics original) {
+        if(paused||closed||game.gameOver||System.nanoTime()>tipUntil)return;
+        Graphics2D g=(Graphics2D)original.create();
+        try {
+            g.setFont(new Font("Microsoft YaHei",Font.BOLD,18));
+            int width=g.getFontMetrics().stringWidth(shownTip)+36;
+            int x=(getWidth()-width)/2, y=getHeight()/2-24;
+            g.setColor(new Color(250,246,225,230));
+            g.fillRoundRect(x,y,width,48,16,16);
+            g.setColor(new Color(40,80,30));
+            g.drawString(shownTip,x+18,y+31);
+        } finally {g.dispose();}
     }
 
     private double viewScale() {
@@ -252,7 +273,9 @@ public class GamePanel extends JPanel {
             for (Enemy enemy : game.enemies) enemy.zombie.draw(g);
             for (Shot shot : game.shots) shot.bullet.draw(g);
             for (Blast blast : game.blasts) blast.draw(g);
+            for (AnimationEffect effect : game.effects) effect.draw(g);
             for (Sun sun : game.suns) sun.draw(g);
         } finally { g.dispose(); }
+        drawTip(original);
     }
 }
