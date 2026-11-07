@@ -33,8 +33,10 @@ public class GameModel {
     public void addShot(int row, Bullet bullet) { shots.add(new Shot(row, bullet)); }
     public void addSun(int x, int y) { suns.add(new Sun(x, y)); }
     public boolean hasTarget(int row, int muzzleX) {
-        return enemies.stream().anyMatch(e -> e.row == row && !e.zombie.isDead()
-                && e.zombie.getBounds().x >= muzzleX);
+        return enemies.stream().anyMatch(
+                e -> e.row == row
+                        && !e.zombie.isDead()
+                        && e.zombie.getBounds().getMaxX() >= muzzleX);
     }
     public boolean hasNearbyEnemy(int row, int centerX, int range) {
         return enemies.stream().anyMatch(e -> e.row == row && !e.zombie.isDead()
@@ -157,6 +159,24 @@ public class GameModel {
         tip = type.displayName + "种植成功";
     }
 
+    // 只检查同一行，优先寻找右侧遇到的植物
+    private Plant findBlockingPlant(Enemy enemy) {
+        double zombieX = enemy.zombie.getBounds().getX();
+
+        for (int col = COLS - 1; col >= 0; col--) {
+            Plant plant = plants[enemy.row][col];
+
+            if (plant != null
+                    && !plant.isDead()
+                    && zombieX <= plant.getX() + 30
+                    && zombieX + 85 >= plant.getX()) {
+                return plant;
+            }
+        }
+
+        return null;
+    }
+
     public void update() {
         blasts.removeIf(blast -> { blast.age += STEP; return blast.age >= 600; });
         if (gameOver) {
@@ -195,7 +215,14 @@ public class GameModel {
 
             // 僵尸脚底与这一行的植物对齐
             int zombieY = plantY(row) - 45;
-            enemies.add(new Enemy(row, new Zombie(1000, zombieY)));
+            // 三种僵尸依次出场，所在行仍然随机
+            Zombie zombie = switch (spawnedCount % 3) {
+                case 1 -> new ConeheadZombie(1000, zombieY);
+                case 2 -> new BucketheadZombie(1000, zombieY);
+                default -> new NormalZombie(1000, zombieY);
+            };
+
+            enemies.add(new Enemy(row, zombie));
 
             spawnedCount++;
             spawnTime = 0;
@@ -212,7 +239,19 @@ public class GameModel {
         }
 
         for (Enemy enemy : enemies) {
-            enemy.zombie.move();
+            if (enemy.zombie.isDead()) {
+                continue;
+            }
+
+            Plant target = findBlockingPlant(enemy);
+
+            // 找到植物就啃咬，否则向左移动
+            enemy.zombie.update(target, STEP);
+
+            // 被吃掉的植物从格子中移除
+            if (target != null && target.isDead()) {
+                removePlant(target);
+            }
         }
 
         for (Shot shot : shots) {
