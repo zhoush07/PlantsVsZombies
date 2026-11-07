@@ -2,7 +2,7 @@
 public class Peashooter extends Plant {
     private int attackTime;
     public Peashooter(int row, int col) {
-        this(row, col, "graphics/Plants/Peashooter/0.gif");
+        this(row, col, "graphics/Plants/Peashooter/1.gif");
     }
     protected Peashooter(int row, int col, String path) { super(row, col, path); }
     @Override public void update(GameModel game, int elapsedMs) {
@@ -13,6 +13,6 @@ public class Peashooter extends Plant {
         }
     }
     protected void fire(GameModel game) {
-        game.addShot(row, new Bullet(x + 55, y + 15));
+        react();game.addShot(row, new Bullet(x + 55, y + 15));
     }
 }

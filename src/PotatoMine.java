@@ -7,6 +7,9 @@ public class PotatoMine extends Plant {
     public PotatoMine(int row, int col) { super(row, col, "graphics/Plants/PotatoMine/0.gif"); }
     @Override public void update(GameModel game, int elapsedMs) {
         preparationTime = Math.min(10000, preparationTime + elapsedMs);
+        if (preparationTime >= 10000) {
+            setAnimation("graphics/Plants/PotatoMine/PotatoMine.gif");
+        }
         if (preparationTime >= 10000 && game.hasNearbyEnemy(row, x + 32, 45)) {
             explode(game, 0, 65);
         }

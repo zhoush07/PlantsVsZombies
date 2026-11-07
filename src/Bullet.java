@@ -6,6 +6,7 @@ public class Bullet {
     private int x;
     private final int y;
     private final boolean ice;
+    private int age;
 
     public Bullet(int x, int y) {
         this(x, y, false);
@@ -24,6 +25,7 @@ public class Bullet {
 
     public void move() {
         x += 8;
+        age += 20;
     }
 
     public boolean isOffScreen() {
@@ -40,5 +42,11 @@ public class Bullet {
 
         g.setColor(ice ? new Color(150, 235, 255) : new Color(145, 230, 50));
         g.fillOval(x + 2, y + 2, 11, 11);
+        double angle = age / 110.0;
+        g.setColor(ice ? new Color(180, 240, 255, 130) : new Color(160, 240, 70, 100));
+        g.fillOval(x - 9, y + 5, 7, 7);
+        g.setColor(Color.WHITE);
+        g.fillOval(x + 6 + (int)(Math.cos(angle)*3),
+                y + 6 + (int)(Math.sin(angle)*3), 3, 3);
     }
 }

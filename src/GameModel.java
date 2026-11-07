@@ -15,6 +15,7 @@ public class GameModel {
     final List<Shot> shots = new ArrayList<>();
     final List<Sun> suns = new ArrayList<>();
     final List<Blast> blasts = new ArrayList<>();
+    final List<AnimationEffect> effects = new ArrayList<>();
     final int[] cooldowns = new int[PlantType.values().length];
     private final Random random = new Random();
     PlantType selectedPlant;
@@ -178,7 +179,8 @@ public class GameModel {
     }
 
     public void update() {
-        blasts.removeIf(blast -> { blast.age += STEP; return blast.age >= 600; });
+        effects.removeIf(effect -> { effect.update(STEP); return effect.isFinished(); });
+        blasts.removeIf(blast -> { blast.age += STEP; return blast.isFinished(); });
         if (gameOver) {
 
             return;
@@ -208,9 +210,9 @@ public class GameModel {
             skySunTime = 0;
         }
 
-        // 首只僵尸在 15 秒后出现，之后每隔 15 秒出现一只
+        // 首只僵尸在 10 秒后出现，之后每隔 10 秒出现一只
         spawnTime += STEP;
-        if (spawnTime >= 15000 && spawnedCount < TOTAL_ZOMBIES) {
+        if (spawnTime >= 10000 && spawnedCount < TOTAL_ZOMBIES) {
             int row = random.nextInt(ROWS);
 
             // 僵尸脚底与这一行的植物对齐
@@ -233,6 +235,7 @@ public class GameModel {
             for (int col = 0; col < COLS; col++) {
                 Plant plant = plants[row][col];
                 if (plant != null) {
+                    plant.advanceAnimation(STEP);
                     plant.update(this, STEP);
                 }
             }
@@ -250,6 +253,7 @@ public class GameModel {
 
             // 被吃掉的植物从格子中移除
             if (target != null && target.isDead()) {
+                effects.add(target.deathEffect());
                 removePlant(target);
             }
         }
@@ -287,6 +291,7 @@ public class GameModel {
             Enemy enemy = enemyIterator.next();
 
             if (enemy.zombie.isDead()) {
+                effects.add(enemy.zombie.deathEffect());
                 enemyIterator.remove();
                 defeatedCount++;
             }

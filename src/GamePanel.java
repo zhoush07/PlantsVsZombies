@@ -15,6 +15,28 @@ public class GamePanel extends JPanel {
     private final JToggleButton shovelButton = new JToggleButton("铲子");
     private final EnumMap<PlantType, JToggleButton> cards = new EnumMap<>(PlantType.class);
     private final Timer timer;
+    private long lastTickNanos;
+    private long pendingNanos;
+
+    // 根据现实经过的时间，补齐应该执行的游戏更新
+    private void advanceTo(long now) {
+        pendingNanos += Math.max(0, now - lastTickNanos);
+        lastTickNanos = now;
+
+        long stepNanos = GameModel.STEP * 1_000_000L;
+
+        while (pendingNanos >= stepNanos) {
+            game.update();
+            pendingNanos -= stepNanos;
+
+            if (game.gameOver
+                    && game.blasts.isEmpty()
+                    && game.effects.isEmpty()) {
+                pendingNanos = 0;
+                break;
+            }
+        }
+    }
 
     public GamePanel() {
         setPreferredSize(new Dimension(GameModel.WIDTH, GameModel.HEIGHT));
@@ -33,10 +55,10 @@ public class GamePanel extends JPanel {
             }
         });
         timer = new Timer(GameModel.STEP, e -> {
-            game.update();
+            advanceTo(System.nanoTime());
             refreshInterface();
             repaint();
-            if (game.gameOver && game.blasts.isEmpty()) ((Timer)e.getSource()).stop();
+            if (game.gameOver && game.blasts.isEmpty() && game.effects.isEmpty()) ((Timer)e.getSource()).stop();
         });
         refreshInterface();
     }
@@ -90,9 +112,16 @@ public class GamePanel extends JPanel {
         for (PlantType type : PlantType.values()) {
             JToggleButton button = cards.get(type);
             int remaining = game.cooldowns[type.ordinal()];
-            button.setText("<html><center>" + type.displayName + " " + type.cost + "<br>"
-                    + (remaining > 0 ? ((remaining + 999) / 1000) + "秒后可用" : "可选择")
-                    + "</center></html>");
+            String cardText =
+                    "<html><center>" + type.displayName + " " + type.cost + "<br>"
+                            + (remaining > 0
+                            ? ((remaining + 999) / 1000) + "秒后可用"
+                            : "可选择")
+                            + "</center></html>";
+
+            if (!cardText.equals(button.getText())) {
+                button.setText(cardText);
+            }
             button.setSelected(game.selectedPlant == type);
             button.setEnabled(!game.gameOver);
             button.setForeground(remaining > 0 || game.sunshine < type.cost
@@ -106,9 +135,18 @@ public class GamePanel extends JPanel {
     private double viewScale() {
         return Math.min(getWidth() / (double)GameModel.WIDTH, getHeight() / (double)GameModel.HEIGHT);
     }
-    @Override public void addNotify() {
+    @Override
+    public void addNotify() {
         super.addNotify();
-        if (!game.gameOver || !game.blasts.isEmpty()) timer.start();
+
+        lastTickNanos = System.nanoTime();
+        pendingNanos = 0;
+
+        if (!game.gameOver
+                || !game.blasts.isEmpty()
+                || !game.effects.isEmpty()) {
+            timer.start();
+        }
     }
     @Override public void removeNotify() { timer.stop(); super.removeNotify(); }
 
