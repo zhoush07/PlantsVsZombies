@@ -67,6 +67,7 @@ public class Zombie {
             // 每隔一秒造成 25 点伤害
             while (biteTime >= 1000 && !target.isDead()) {
                 target.takeDamage(25);
+                SoundManager.play(SoundManager.Sound.BITE);
                 biteTime -= 1000;
             }
         } else {

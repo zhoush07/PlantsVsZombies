@@ -14,11 +14,7 @@ public class Main {
 
         GameWindow() {
             super("植物大战僵尸");
-            GamePanel game = new GamePanel();
-            setLayout(new BorderLayout());
-            add(game.getToolbar(), BorderLayout.NORTH);
-            add(game, BorderLayout.CENTER);
-            add(game.getStatusBar(), BorderLayout.SOUTH);
+            setContentPane(new GameController());
             setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
             setResizable(true);
             setMinimumSize(new Dimension(900, 500));

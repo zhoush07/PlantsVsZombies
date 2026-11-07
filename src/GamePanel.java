@@ -7,7 +7,10 @@ import java.util.EnumMap;
 
 /** 只负责界面、缩放、鼠标输入和刷新；植物行为由各植物类完成。 */
 public class GamePanel extends JPanel {
-    private final GameModel game = new GameModel();
+    private final GameModel game;
+    private String shownTip="";
+    private long tipUntil;
+    public boolean isWon() { return game.won; }
     private final BufferedImage background = Assets.load("graphics/Map/map0.jpg");
     private final JPanel toolbar = new JPanel(new BorderLayout());
     private final JLabel sunLabel = new JLabel(), progressLabel = new JLabel();
@@ -15,11 +18,53 @@ public class GamePanel extends JPanel {
     private final JToggleButton shovelButton = new JToggleButton("铲子");
     private final EnumMap<PlantType, JToggleButton> cards = new EnumMap<>(PlantType.class);
     private final Timer timer;
+    private boolean paused;
+    private boolean closed;
+    private boolean finishNotified;
+
+    private Runnable onFinished = () -> {};
+
+    public boolean isPaused() {
+        return paused;
+    }
+
+    public void setOnFinished(Runnable action) {
+        onFinished = action;
+    }
+
+    public void setPaused(boolean value) {
+        if (closed || game.gameOver || paused == value) {
+            return;
+        }
+
+        paused = value;
+        timer.stop();
+
+        // 清除暂停期间的时间，继续时不会突然补算
+        lastTickNanos = System.nanoTime();
+        pendingNanos = 0;
+
+        if (!paused && isDisplayable()) {
+            timer.start();
+        }
+
+        refreshInterface();
+        repaint();
+    }
+
+    public void stopGame() {
+        closed = true;
+        timer.stop();
+        pendingNanos = 0;
+    }
     private long lastTickNanos;
     private long pendingNanos;
 
     // 根据现实经过的时间，补齐应该执行的游戏更新
     private void advanceTo(long now) {
+        if (paused || closed) {
+            return;
+        }
         pendingNanos += Math.max(0, now - lastTickNanos);
         lastTickNanos = now;
 
@@ -38,12 +83,17 @@ public class GamePanel extends JPanel {
         }
     }
 
-    public GamePanel() {
+    public GamePanel() { this(Difficulty.EASY); }
+    public GamePanel(Difficulty difficulty) {
+        game=new GameModel(difficulty);
         setPreferredSize(new Dimension(GameModel.WIDTH, GameModel.HEIGHT));
         setBackground(new Color(223, 234, 210));
         buildInterface();
         addMouseListener(new MouseAdapter() {
             @Override public void mousePressed(MouseEvent event) {
+                if (paused || closed) {
+                    return;
+                }
                 double scale = viewScale();
                 if (scale <= 0) return;
                 double x = (event.getX() - (getWidth() - GameModel.WIDTH * scale) / 2) / scale;
@@ -55,10 +105,27 @@ public class GamePanel extends JPanel {
             }
         });
         timer = new Timer(GameModel.STEP, e -> {
+            if (paused || closed) {
+                return;
+            }
+
             advanceTo(System.nanoTime());
+
+            // 只通知一次本局结束
+            if (game.gameOver && !finishNotified) {
+                finishNotified = true;
+                onFinished.run();
+            }
+
             refreshInterface();
             repaint();
-            if (game.gameOver && game.blasts.isEmpty() && game.effects.isEmpty()) ((Timer)e.getSource()).stop();
+
+            // 等死亡和爆炸效果播完，再停止刷新
+            if (game.gameOver
+                    && game.blasts.isEmpty()
+                    && game.effects.isEmpty()) {
+                ((Timer) e.getSource()).stop();
+            }
         });
         refreshInterface();
     }
@@ -82,6 +149,10 @@ public class GamePanel extends JPanel {
             cards.put(type, button);
             buttons.add(button);
             button.addActionListener(e -> {
+                if (paused || closed) {
+                    return;
+                }
+
                 game.selectPlant(type);
                 refreshInterface();
                 repaint();
@@ -89,6 +160,10 @@ public class GamePanel extends JPanel {
         }
         buttons.add(shovelButton);
         shovelButton.addActionListener(e -> {
+            if (paused || closed) {
+                return;
+            }
+
             game.selectShovel();
             refreshInterface();
             repaint();
@@ -107,7 +182,7 @@ public class GamePanel extends JPanel {
 
     private void refreshInterface() {
         sunLabel.setText("阳光：" + game.sunshine);
-        progressLabel.setText("出场 " + game.spawnedCount + "/" + GameModel.TOTAL_ZOMBIES
+        progressLabel.setText("出场 " + game.spawnedCount + "/" + game.difficulty.totalZombies
                 + "  消灭 " + game.defeatedCount);
         for (PlantType type : PlantType.values()) {
             JToggleButton button = cards.get(type);
@@ -123,13 +198,31 @@ public class GamePanel extends JPanel {
                 button.setText(cardText);
             }
             button.setSelected(game.selectedPlant == type);
-            button.setEnabled(!game.gameOver);
+            button.setEnabled(!game.gameOver && !paused && !closed);
             button.setForeground(remaining > 0 || game.sunshine < type.cost
                     ? Color.GRAY : new Color(30, 90, 30));
         }
         shovelButton.setSelected(game.shovelSelected);
-        shovelButton.setEnabled(!game.gameOver);
-        statusLabel.setText(game.tip + "    |    F11 全屏 / Esc 退出全屏");
+        shovelButton.setEnabled(!game.gameOver && !paused && !closed);
+        statusLabel.setText("F11 全屏 / Esc 退出全屏");
+        if (!shownTip.equals(game.tip)) {
+            shownTip=game.tip;
+            tipUntil=System.nanoTime()+1_800_000_000L;
+        }
+    }
+
+    private void drawTip(Graphics original) {
+        if(paused||closed||game.gameOver||System.nanoTime()>tipUntil)return;
+        Graphics2D g=(Graphics2D)original.create();
+        try {
+            g.setFont(new Font("Microsoft YaHei",Font.BOLD,18));
+            int width=g.getFontMetrics().stringWidth(shownTip)+36;
+            int x=(getWidth()-width)/2, y=getHeight()/2-24;
+            g.setColor(new Color(250,246,225,230));
+            g.fillRoundRect(x,y,width,48,16,16);
+            g.setColor(new Color(40,80,30));
+            g.drawString(shownTip,x+18,y+31);
+        } finally {g.dispose();}
     }
 
     private double viewScale() {
@@ -142,9 +235,10 @@ public class GamePanel extends JPanel {
         lastTickNanos = System.nanoTime();
         pendingNanos = 0;
 
-        if (!game.gameOver
+        if (!paused && !closed
+                && (!game.gameOver
                 || !game.blasts.isEmpty()
-                || !game.effects.isEmpty()) {
+                || !game.effects.isEmpty())) {
             timer.start();
         }
     }
@@ -179,7 +273,9 @@ public class GamePanel extends JPanel {
             for (Enemy enemy : game.enemies) enemy.zombie.draw(g);
             for (Shot shot : game.shots) shot.bullet.draw(g);
             for (Blast blast : game.blasts) blast.draw(g);
+            for (AnimationEffect effect : game.effects) effect.draw(g);
             for (Sun sun : game.suns) sun.draw(g);
         } finally { g.dispose(); }
+        drawTip(original);
     }
 }

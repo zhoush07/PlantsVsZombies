@@ -9,7 +9,15 @@ public class GameModel {
     public static final int WIDTH = 1120, HEIGHT = 480;
     public static final int ROWS = 5, COLS = 9;
     public static final int GRID_X = 210, GRID_Y = 80, CELL_W = 65, CELL_H = 75;
-    public static final int STEP = 20, TOTAL_ZOMBIES = 10;
+    public static final int STEP = 20;
+    final Difficulty difficulty;
+    boolean won;
+
+    public GameModel() { this(Difficulty.EASY); }
+    public GameModel(Difficulty difficulty) {
+        this.difficulty=difficulty;
+        sunshine=difficulty.initialSun;
+    }
     final Plant[][] plants = new Plant[ROWS][COLS];
     final List<Enemy> enemies = new ArrayList<>();
     final List<Shot> shots = new ArrayList<>();
@@ -20,7 +28,7 @@ public class GameModel {
     private final Random random = new Random();
     PlantType selectedPlant;
     boolean shovelSelected, gameOver;
-    int sunshine = 500, spawnedCount, defeatedCount;
+    int sunshine, spawnedCount, defeatedCount;
     private int spawnTime, skySunTime;
     String tip = "先选择植物卡片，再点击草坪格子";
 
@@ -31,7 +39,10 @@ public class GameModel {
         selectedPlant = null;
         tip = shovelSelected ? "点击植物将其铲除，不返还阳光" : "已取消铲子";
     }
-    public void addShot(int row, Bullet bullet) { shots.add(new Shot(row, bullet)); }
+    public void addShot(int row, Bullet bullet) {
+        shots.add(new Shot(row, bullet));
+        SoundManager.play(SoundManager.Sound.SHOOT);
+    }
     public void addSun(int x, int y) { suns.add(new Sun(x, y)); }
     public boolean hasTarget(int row, int muzzleX) {
         return enemies.stream().anyMatch(
@@ -54,12 +65,16 @@ public class GameModel {
             }
         }
         blasts.add(new Blast(centerX, centerY, range, rowRange == 0 ? 35 : CELL_H + 35));
+        SoundManager.play(SoundManager.Sound.BOOM);
     }
     private void finishGame(String message) {
         gameOver = true;
+        won = defeatedCount == difficulty.totalZombies;
+        SoundManager.setMusicEnabled(false);
+        SoundManager.play(won ? SoundManager.Sound.WIN : SoundManager.Sound.LOSE);
         selectedPlant = null;
         shovelSelected = false;
-        tip = message + " 重新运行 Main 可以再玩一局。";
+        tip = message + " 点击“重新开始”再玩一局，或返回主菜单。";
     }
 
 
@@ -101,6 +116,7 @@ public class GameModel {
 
             if (sun.contains(x, y)) {
                 sunshine += 25;
+                SoundManager.play(SoundManager.Sound.SUN);
                 sunIterator.remove();
                 tip = "阳光 +25";
                 return;
@@ -154,6 +170,7 @@ public class GameModel {
         PlantType type = selectedPlant;
         plants[row][col] = type.create(row, col);
         sunshine -= type.cost;
+        SoundManager.play(SoundManager.Sound.PLANT);
         cooldowns[type.ordinal()] = type.cooldown;
         selectedPlant = null;
 
@@ -212,7 +229,7 @@ public class GameModel {
 
         // 首只僵尸在 10 秒后出现，之后每隔 10 秒出现一只
         spawnTime += STEP;
-        if (spawnTime >= 10000 && spawnedCount < TOTAL_ZOMBIES) {
+        if (spawnTime >= difficulty.spawnDelay(spawnedCount) && spawnedCount < difficulty.totalZombies) {
             int row = random.nextInt(ROWS);
 
             // 僵尸脚底与这一行的植物对齐
@@ -304,7 +321,7 @@ public class GameModel {
             }
         }
 
-        if (spawnedCount == TOTAL_ZOMBIES && enemies.isEmpty()) {
+        if (spawnedCount == difficulty.totalZombies && enemies.isEmpty()) {
             finishGame("游戏胜利！全部僵尸已消灭。");
         }
     }
